@@ -11,10 +11,12 @@ import {
 } from 'react'
 import {
   Link,
+  Navigate,
   NavLink,
   Outlet,
   Route,
   Routes,
+  useLocation,
   useNavigate,
   useParams,
   useSearchParams,
@@ -24,6 +26,8 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  Eye,
+  EyeOff,
   Heart,
   Instagram,
   LockKeyhole,
@@ -122,6 +126,7 @@ function mergeLines(...groups: CartLine[][]) {
 
 function App() {
   const [user, setUser] = useState<User | null>(null)
+  const [authLoading, setAuthLoading] = useState(Boolean(auth))
   const [cart, setCartState] = useState<CartLine[]>(() => {
     try {
       return JSON.parse(localStorage.getItem('tfc-cart') ?? '[]') as CartLine[]
@@ -169,13 +174,10 @@ function App() {
   }
 
   useEffect(() => {
-    void refreshCatalog()
-  }, [])
-
-  useEffect(() => {
     if (!auth) return
     return onAuthStateChanged(auth, async (nextUser) => {
       setUser(nextUser)
+      setAuthLoading(false)
       if (!nextUser) {
         setAccountDataLoaded(true)
         return
@@ -192,8 +194,20 @@ function App() {
       } finally {
         setAccountDataLoaded(true)
       }
-    })
+    }, () => setAuthLoading(false))
   }, [])
+
+  useEffect(() => {
+    if (authLoading) return
+    if (!user) {
+      setProducts([])
+      setHampers([])
+      setCatalogError('')
+      setCatalogLoading(false)
+      return
+    }
+    void refreshCatalog()
+  }, [authLoading, user])
 
   useEffect(() => {
     localStorage.setItem('tfc-cart', JSON.stringify(cart))
@@ -234,32 +248,46 @@ function App() {
   return (
     <StoreContext.Provider value={value}>
       <Routes>
-        <Route element={<Layout />}>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/shop" element={<CatalogPage />} />
-          <Route path="/category/:category" element={<CatalogPage />} />
-          <Route path="/hampers" element={<HampersPage />} />
-          <Route path="/build-hamper" element={<HamperBuilder />} />
-          <Route path="/product/:id" element={<ProductPage />} />
-          <Route path="/bag" element={<CartPage />} />
-          <Route path="/wishlist" element={<WishlistPage />} />
-          <Route path="/checkout" element={<CheckoutPage />} />
-          <Route path="/payment/:id" element={<PaymentPage />} />
-          <Route path="/order-confirmation/:id" element={<OrderConfirmationPage />} />
-          <Route path="/login" element={<AuthPage mode="login" />} />
-          <Route path="/register" element={<AuthPage mode="register" />} />
-          <Route path="/forgot-password" element={<AuthPage mode="reset" />} />
-          <Route path="/account" element={<AccountPage />} />
-          <Route path="/admin" element={<AdminPage />} />
-          <Route path="/about" element={<InfoPage type="about" />} />
-          <Route path="/contact" element={<InfoPage type="contact" />} />
-          <Route path="/faq" element={<InfoPage type="faq" />} />
-          <Route path="/policies/:policy" element={<PolicyPage />} />
-          <Route path="*" element={<NotFoundPage />} />
+        <Route path="/login" element={<AuthPage mode="login" />} />
+        <Route path="/register" element={<AuthPage mode="register" />} />
+        <Route path="/forgot-password" element={<AuthPage mode="reset" />} />
+        <Route element={<AuthGate user={user} loading={authLoading} />}>
+          <Route element={<Layout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/shop" element={<CatalogPage />} />
+            <Route path="/category/:category" element={<CatalogPage />} />
+            <Route path="/hampers" element={<HampersPage />} />
+            <Route path="/build-hamper" element={<HamperBuilder />} />
+            <Route path="/product/:id" element={<ProductPage />} />
+            <Route path="/bag" element={<CartPage />} />
+            <Route path="/wishlist" element={<WishlistPage />} />
+            <Route path="/checkout" element={<CheckoutPage />} />
+            <Route path="/payment/:id" element={<PaymentPage />} />
+            <Route path="/order-confirmation/:id" element={<OrderConfirmationPage />} />
+            <Route path="/account" element={<AccountPage />} />
+            <Route path="/admin" element={<AdminPage />} />
+            <Route path="/about" element={<InfoPage type="about" />} />
+            <Route path="/contact" element={<InfoPage type="contact" />} />
+            <Route path="/faq" element={<InfoPage type="faq" />} />
+            <Route path="/policies/:policy" element={<PolicyPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
         </Route>
       </Routes>
     </StoreContext.Provider>
   )
+}
+
+function AuthGate({ user, loading }: { user: User | null; loading: boolean }) {
+  const location = useLocation()
+  if (loading) {
+    return <section className="auth-section section"><div className="auth-card"><Eyebrow>ONE MOMENT</Eyebrow><h1>Opening your<br /><em>little corner.</em></h1><p>Checking your sign-in…</p></div></section>
+  }
+  if (!user) {
+    const next = `${location.pathname}${location.search}${location.hash}`
+    return <Navigate to={`/login?next=${encodeURIComponent(next)}`} replace />
+  }
+  return <Outlet />
 }
 
 function Layout() {
@@ -1078,19 +1106,37 @@ function OrderConfirmationPage() {
   return <section className="confirmation-section section"><div className="confirmation-mark"><Check size={28} /></div><Eyebrow>ORDER REQUEST RECEIVED</Eyebrow><h1>Thank you for<br /><em>your little order.</em></h1><p>Your order reference is <strong>{id}</strong>. The store will confirm your items, availability, shipping and final payable amount before dispatch.</p><div className="confirmation-status"><span className="status-dot" /> Order placed · Payment pending</div><p className="muted-note">This is not a payment confirmation. The store will contact you using the details provided at checkout.</p><Link className="button button-dark" to="/account">See your orders <ArrowRight size={16} /></Link></section>
 }
 
+function safeNextPath(path: string | null) {
+  if (!path || !path.startsWith('/') || path.startsWith('//') || path.includes('\\')) return '/'
+  const pathname = path.split(/[?#]/, 1)[0]
+  if (['/login', '/register', '/forgot-password'].includes(pathname)) return '/'
+  return path
+}
+
 function AuthPage({ mode }: { mode: 'login' | 'register' | 'reset' }) {
   const { user } = useStore()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [name, setName] = useState('')
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  useEffect(() => { if (user && mode !== 'reset') navigate(params.get('next') || '/account') }, [user, mode, navigate, params])
+  const nextPath = safeNextPath(params.get('next'))
+  const nextQuery = nextPath === '/' ? '' : `?next=${encodeURIComponent(nextPath)}`
+  const entryPath = mode === 'login' ? '/register' : '/login'
+  const entryLabel = mode === 'login' ? 'Create an account' : 'Back to sign in'
+  useEffect(() => {
+    if (user && mode !== 'reset') navigate(nextPath, { replace: true })
+  }, [user, mode, navigate, nextPath])
   const submit = async (event: FormEvent) => {
     event.preventDefault()
+    if (mode === 'register' && !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9\s]).{8,}$/.test(password)) {
+      setError('Use at least 8 characters with an uppercase letter, a lowercase letter, a number, and a symbol.')
+      return
+    }
     if (!auth) {
       setError('Customer accounts are not enabled until Firebase is configured.')
       return
@@ -1109,7 +1155,7 @@ function AuthPage({ mode }: { mode: 'login' | 'register' | 'reset' }) {
         setNotice('Your account is ready. Please check your email to verify your address.')
       } else {
         await signInWithEmailAndPassword(auth, email, password)
-        navigate(params.get('next') || '/account')
+        navigate(nextPath, { replace: true })
       }
     } catch (authError) {
       setError(authError instanceof Error ? authError.message : 'We could not complete that request.')
@@ -1118,7 +1164,58 @@ function AuthPage({ mode }: { mode: 'login' | 'register' | 'reset' }) {
     }
   }
   const title = mode === 'register' ? 'Start a lovely chapter.' : mode === 'reset' ? 'Let’s find your way back.' : 'Welcome back.'
-  return <section className="auth-section section"><div className="auth-card"><Link className="back-link" to="/"><ArrowLeft size={15} /> Back to the beginning</Link><Eyebrow>YOUR LITTLE CORNER</Eyebrow><h1>{title}</h1><p>{mode === 'register' ? 'Create an account to keep your orders and favourite things together.' : mode === 'reset' ? 'Enter your email and we’ll send a password reset link.' : 'Sign in to continue your lovely chapter.'}</p><form onSubmit={submit}>{mode === 'register' && <TextField label="Full name" value={name} onChange={setName} required />}<TextField label="Email address" type="email" value={email} onChange={setEmail} required />{mode !== 'reset' && <label className="field-label">Password<input type="password" minLength={6} value={password} onChange={(event) => setPassword(event.target.value)} required /></label>}{error && <p className="form-error" role="alert">{error}</p>}{notice && <p className="form-notice" role="status">{notice}</p>}<button className="button button-dark button-full" disabled={busy}>{busy ? 'One moment…' : mode === 'register' ? 'Create account' : mode === 'reset' ? 'Send reset link' : 'Sign in'} <ArrowRight size={16} /></button></form>{mode === 'login' && <Link className="text-link auth-reset" to="/forgot-password">Forgot your password?</Link>}{mode === 'login' ? <p className="auth-switch">New around here? <Link to="/register">Create an account</Link></p> : mode === 'register' ? <p className="auth-switch">Already have an account? <Link to="/login">Sign in</Link></p> : <p className="auth-switch"><Link to="/login">Back to sign in</Link></p>}</div></section>
+  return (
+    <section className="auth-section section">
+      <div className="auth-card">
+        <Link className="back-link" to={`${entryPath}${nextQuery}`}>
+          <ArrowLeft size={15} /> {entryLabel}
+        </Link>
+        <Eyebrow>YOUR LITTLE CORNER</Eyebrow>
+        <h1>{title}</h1>
+        <p>{mode === 'register' ? 'Create an account to enter the store and keep your orders together.' : mode === 'reset' ? 'Enter your email and we’ll send a password reset link.' : 'Sign in to enter The Fabric Chapter.'}</p>
+        <form onSubmit={submit}>
+          {mode === 'register' && <TextField label="Full name" value={name} onChange={setName} required />}
+          <TextField label="Email address" type="email" value={email} onChange={setEmail} required />
+          {mode !== 'reset' && (
+            <label className="field-label">
+              Password
+              <span className="password-control">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  minLength={mode === 'register' ? 8 : 6}
+                  autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                />
+                <button
+                  className="password-visibility"
+                  type="button"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((visible) => !visible)}
+                >
+                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
+              </span>
+              {mode === 'register' && <span className="password-hint">At least 8 characters, with uppercase and lowercase letters, a number, and a symbol.</span>}
+            </label>
+          )}
+          {error && <p className="form-error" role="alert">{error}</p>}
+          {notice && <p className="form-notice" role="status">{notice}</p>}
+          <button className="button button-dark button-full" disabled={busy}>
+            {busy ? 'One moment…' : mode === 'register' ? 'Create account' : mode === 'reset' ? 'Send reset link' : 'Sign in'} <ArrowRight size={16} />
+          </button>
+        </form>
+        {mode === 'login' && <Link className="text-link auth-reset" to={`/forgot-password${nextQuery}`}>Forgot your password?</Link>}
+        {mode === 'login'
+          ? <p className="auth-switch">New around here? <Link to={`/register${nextQuery}`}>Create an account</Link></p>
+          : mode === 'register'
+            ? <p className="auth-switch">Already have an account? <Link to={`/login${nextQuery}`}>Sign in</Link></p>
+            : <p className="auth-switch"><Link to={`/login${nextQuery}`}>Back to sign in</Link></p>}
+      </div>
+    </section>
+  )
 }
 
 function AccountPage() {

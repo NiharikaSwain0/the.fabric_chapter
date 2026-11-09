@@ -13,11 +13,12 @@ A responsive React storefront for The Fabric Chapter, built with Firebase Authen
 5. Start the app with `npm run dev`.
 6. For Hosting, run `npm run build`, then `firebase deploy --only hosting,firestore:rules`. `firebase.json` configures static hosting and SPA routes; no billing or Functions are enabled.
 
-Without Firebase configuration, the informational storefront still opens, while catalog, account, cart sync, and checkout functions remain unavailable. No demo inventory is seeded.
+All storefront routes require an authenticated Firebase account. Signed-out visitors are sent to login or registration and returned to their requested page after signing in. Without Firebase configuration, the auth screens remain available but account creation and store access cannot complete. No demo inventory is seeded.
 
 ## Firebase setup
 
 - Registration and login use one customer-facing Email/Password flow; there is no role selector. All authenticated users receive customer access by default. Elevated admin access comes only from an owner-provisioned `admins/{uid}` document, never from a role field or value supplied by the browser.
+- Every storefront route, including catalog, product, policy, and admin pages, is behind the authentication gate. Login, registration, and password reset remain available before signing in.
 - Provision administrators from the Firebase console using the account's authenticated UID, or from a trusted owner-controlled Firebase Admin SDK environment. Client rules deny create, update, delete, and list access to `admins`; changing a URL or request cannot grant admin access.
 - The app uses Firebase Authentication and Cloud Firestore from the client. It does not use Cloud Functions, paid APIs, or a payment gateway. SMS phone authentication is intentionally not enabled: Firebase phone OTP requires Blaze billing and per-SMS charges, which this Spark-only setup does not authorize.
 - Add product documents to `products` with `name`, `description`, `categoryId`, `price`, `stock`, and `active` fields. Optional fields include `discountPrice`, `colors`, `variants`, `imageUrl`, and `popularity`.

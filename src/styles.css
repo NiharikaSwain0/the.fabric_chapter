@@ -434,6 +434,26 @@ h1, h2 { font-family: var(--serif); font-weight: 500; }
   resize: vertical;
 }
 .field-label input::placeholder, .field-label textarea::placeholder { color: #b2a398; }
+.password-control { position: relative; display: block; }
+.password-control input { padding-right: 42px; }
+.password-visibility {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  padding: 0;
+  transform: translateY(-50%);
+  border: 0;
+  color: #806d60;
+  background: transparent;
+  cursor: pointer;
+}
+.password-visibility:hover { color: var(--chocolate); }
+.password-visibility:focus-visible { outline: 2px solid #986c58; outline-offset: 1px; }
+.password-hint { color: #907e71; font-size: 9px; line-height: 1.6; }
 .muted-note { color: #907e71; font-size: 9px; line-height: 1.8; }
 .builder-summary { position: sticky; top: 20px; padding: 25px 22px; border: 1px solid var(--line); background: #f4eee5; }
 .summary-top { display: flex; justify-content: space-between; }
